@@ -19,3 +19,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+IMPORTANT NOTE:
+
+This license applies ONLY to the build automation scripts, workflows, and
+documentation in this repository (build-local.ps1, GitHub Actions workflows,
+docker-compose.yml, etc.).
+
+OpenFrontIO itself is licensed separately under the GNU Affero General Public
+License v3.0. See: https://github.com/openfrontio/OpenFrontIO/blob/main/LICENSE
+
+The Docker images built by this repository contain OpenFrontIO and are subject
+to OpenFrontIO's licensing terms.

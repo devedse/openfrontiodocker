@@ -1,0 +1,23 @@
+services:
+  openfrontio:
+    image: devedse/openfrontio:latest
+    container_name: openfrontio
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      # Optional: OpenTelemetry configuration for monitoring
+      # OTEL_EXPORTER_OTLP_ENDPOINT: https://your-otel-endpoint
+      # OTEL_AUTH_HEADER: Bearer your_token
+    volumes:
+      # Optional: Mount custom nginx configuration
+      # - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      
+      # Optional: Access logs for debugging
+      # - ./logs:/var/log/supervisor
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

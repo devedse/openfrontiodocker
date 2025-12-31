@@ -1,0 +1,93 @@
+name: Build and Push OpenFrontIO to Docker Hub
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: 'Custom tag for the image (optional)'
+        required: false
+        default: ''
+
+env:
+  DOCKERHUB_USERNAME: devedse
+  IMAGE_NAME: devedse/openfrontio
+  REPO_URL: https://github.com/openfrontio/OpenFrontIO.git
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+      
+      - name: Generate version tag
+        id: version
+        run: |
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          if [ -n "${{ github.event.inputs.custom_tag }}" ]; then
+            VERSION_TAG="${{ github.event.inputs.custom_tag }}"
+          else
+            VERSION_TAG="${TIMESTAMP}"
+          fi
+          echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_ENV
+          echo "version=${VERSION_TAG}" >> $GITHUB_OUTPUT
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUBTOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ env.VERSION_TAG }}
+            type=sha,prefix={{date 'YYYYMMDD'}}-
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          platforms: linux/amd64
+      
+      - name: Create release summary
+        run: |
+          echo "# 🚀 OpenFrontIO Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version Tag**: \`${{ env.VERSION_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Git Commit**: \`${{ env.GIT_SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Full Commit**: [\`${{ env.GIT_COMMIT }}\`](https://github.com/openfrontio/OpenFrontIO/commit/${{ env.GIT_COMMIT }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **OpenFrontIO**: Built from latest main branch" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Docker Images" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}
+      - name: Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUBTOKEN }}
+          repository: ${{ env.IMAGE_NAME }}
+          short-description: 'OpenFrontIO - Online real-time strategy game'
+          readme-filepath: ./README.md
+        continue-on-error: true
