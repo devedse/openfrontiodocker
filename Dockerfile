@@ -1,26 +1,43 @@
-# Multi-stage Dockerfile that clones and builds OpenFrontIO
-FROM node:24-slim AS clone-and-build
-
-# Install git
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-# Clone OpenFrontIO repository
+# Clone OpenFrontIO and use their Dockerfile
+FROM alpine/git AS clone
+WORKDIR /clone
 ARG OPENFRONTIO_REPO=https://github.com/openfrontio/OpenFrontIO.git
-RUN git clone ${OPENFRONTIO_REPO} . && \
-    echo "Cloned commit: $(git rev-parse HEAD)" && \
-    echo "$(git rev-parse HEAD)" > /build/git-commit.txt
+RUN git clone ${OPENFRONTIO_REPO} .
 
-# Install dependencies and build
-ENV HUSKY=0
-RUN npm ci --ignore-scripts && \
-    npm run build-prod
-
-# Final production image - copy from OpenFrontIO's approach
-FROM node:24-slim
-
+# Use OpenFrontIO's multi-stage build (without cloudflared)
+FROM node:24-slim AS base
 WORKDIR /usr/src/app
+
+# Build stage - install ALL dependencies and build
+FROM base AS build
+ENV HUSKY=0
+COPY --from=clone /clone/package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+# Copy only what's needed for build
+COPY --from=clone /clone/tsconfig.json ./
+COPY --from=clone /clone/vite.config.ts ./
+COPY --from=clone /clone/tailwind.config.js ./
+COPY --from=clone /clone/postcss.config.js ./
+COPY --from=clone /clone/eslint.config.js ./
+COPY --from=clone /clone/index.html ./
+COPY --from=clone /clone/resources ./resources
+COPY --from=clone /clone/proprietary ./proprietary
+COPY --from=clone /clone/src ./src
+
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT="$GIT_COMMIT"
+RUN npm run build-prod
+
+# Production dependencies stage
+FROM base AS prod-deps
+ENV HUSKY=0
+ENV NPM_CONFIG_IGNORE_SCRIPTS=1
+COPY --from=clone /clone/package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
+
+# Final production image
+FROM base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -34,35 +51,34 @@ RUN sed -i 's/worker_connections [0-9]*/worker_connections 8192/' /etc/nginx/ngi
 
 # Setup supervisor configuration
 RUN mkdir -p /var/log/supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy files from build stage
-COPY --from=clone-and-build /build/static ./static
-COPY --from=clone-and-build /build/resources ./resources
-COPY --from=clone-and-build /build/src ./src
-COPY --from=clone-and-build /build/package*.json ./
-COPY --from=clone-and-build /build/tsconfig.json ./
-COPY --from=clone-and-build /build/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY --from=clone-and-build /build/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=clone-and-build /build/startup.sh /usr/local/bin/
-COPY --from=clone-and-build /build/git-commit.txt ./static/commit.txt
+# Copy Nginx configuration
+COPY --from=clone /clone/nginx.conf /etc/nginx/conf.d/default.conf
+RUN rm -f /etc/nginx/sites-enabled/default
 
-# Install production dependencies
-ENV HUSKY=0
-ENV NPM_CONFIG_IGNORE_SCRIPTS=1
-RUN npm ci --omit=dev --ignore-scripts
+# Copy and make executable the startup script
+COPY startup.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/startup.sh
+
+# Copy production node_modules from prod-deps stage
+COPY --from=prod-deps /usr/src/app/node_modules ./node_modules
+COPY --from=clone /clone/package*.json ./
+
+# Copy built artifacts from build stage
+COPY --from=build /usr/src/app/static ./static
+
+COPY --from=clone /clone/resources ./resources
 
 # Remove maps because they are not used by the server
 RUN rm -rf ./resources/maps
+COPY --from=clone /clone/tsconfig.json ./
+COPY --from=clone /clone/src ./src
 
-# Remove default nginx site
-RUN rm -f /etc/nginx/sites-enabled/default
-
-# Make startup script executable
-RUN chmod +x /usr/local/bin/startup.sh
-
-# Set git commit env var
 ARG GIT_COMMIT=unknown
-ENV GIT_COMMIT=${GIT_COMMIT}
+RUN echo "$GIT_COMMIT" > static/commit.txt
+
+ENV GIT_COMMIT="$GIT_COMMIT"
 
 # Use the startup script as the entrypoint
 ENTRYPOINT ["/usr/local/bin/startup.sh"]
