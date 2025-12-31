@@ -65,23 +65,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
       
-      - name: Create release summary
-        run: |
-          echo "# 🚀 OpenFrontIO Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Build Information" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version Tag**: \`${{ env.VERSION_TAG }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Git Commit**: \`${{ env.GIT_SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Full Commit**: [\`${{ env.GIT_COMMIT }}\`](https://github.com/openfrontio/OpenFrontIO/commit/${{ env.GIT_COMMIT }})" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- **OpenFrontIO**: Built from latest main branch" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Docker Images" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}
       - name: Docker Hub Description
         uses: peter-evans/dockerhub-description@v4
         with:
