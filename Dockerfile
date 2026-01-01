@@ -11,6 +11,19 @@ WORKDIR /usr/src/app
 # Build stage - install ALL dependencies and build
 FROM base AS build
 ENV HUSKY=0
+
+# Install build dependencies for canvas and other native modules
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    pkg-config \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=clone /clone/package*.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 
